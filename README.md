@@ -1,123 +1,73 @@
-# My Studio
+# Single Studio demo
 
-A [Single Studio](https://github.com/FourCourtJester/Single-Studio) broadcast graphics project.
+A working broadcast studio built on [Single Studio](https://github.com/FourCourtJester/Single-Studio),
+and the thing to look at before starting one of your own.
 
-One repo per show. The repo's name is the show's address, the studio's `name` is
-its label, and neither has to match anything on any server.
-
-## Run it
+Live: **https://fourcourtjester.github.io/Single-Studio-Demo/#/**
 
 ```bash
 npm install
 npm run dev
 ```
 
-**Any package manager works.** This is an ordinary Vite app with no workspace
-protocol and no linking, so pnpm or yarn are fine — npm is used here only because it
-comes with Node. If you switch, change the two `run` lines in
-`.github/workflows/pages.yml` to match, and nothing else.
+Any package manager works — this is an ordinary Vite app depending on two published
+packages. npm is used here only because it comes with Node.
 
-Commit the lockfile that first install produces. Nothing breaks without it — the
-deploy workflow is written to survive a repository that has never been installed —
-but it is what makes a build today and a build in six months the same build.
+Open the printed URL to get the operator's board. The header menu lists every
+graphic's browser-source URL with a copy button, which is what you paste into OBS.
 
-Open the control surface at the printed URL. The header menu lists every graphic's
-browser-source URL with a copy button.
+## The show
 
-## Wire it into OBS
+It is modelled on a squad-based RTS broadcast, because that show happens to use
+every component at once: two drafts, a map, an army composition, and all three
+kinds of clock running together.
 
-1. **Control surface** — Docks &rarr; Custom Browser Docks, point it at the app root (`.../#/`).
-   Running the dock inside OBS is what puts it in the same browser process as your
-   graphics, so they share one store with no network involved.
-2. **Each graphic** — add a Browser source per URL listed in the menu under
-   **Browser sources**. Set the resolution to your canvas (typically 1920x1080).
-   Each copied URL carries the OBS layer name, so the source names itself.
+| Route                                                                                                      | What it is                           |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `#/`                                                                                                       | The operator's board                 |
+| `#/source/match`                                                                                           | The whole show in one browser source |
+| `#/source/scoreboard`, `#/source/lower-third`, `#/source/standings`, `#/source/sponsor`, `#/source/ticker` | Single-purpose graphics              |
+| `#/source/lower-thirds/guest`                                                                              | A nested key, grouped under a folder |
 
-   _Shutdown source when not visible_ is safe to enable. The graphic is rebuilt when
-   its scene returns and paints nothing until it has real values, so you get the
-   memory back without a flash of placeholder text on air.
+`#/source/match` is the one to look at first. Everything inside it is switched on
+and off from the board, which is how a small production actually runs: one browser
+source in OBS, not fifteen.
 
-## Add a graphic
+## The art is a placeholder
 
-Create `src/sources/MyGraphic.jsx` exporting a default component. That is the whole
-step — it appears at `#/source/my-graphic` and in the **Browser sources** list, with
-a copy button and the name OBS should give it.
+Every image under `public/factions`, `public/commanders`, `public/units` and
+`public/maps` is generated — see `scripts/placeholders.mjs`. Nothing here is anyone's
+intellectual property, and all of it is meant to be overwritten.
 
-The key comes from the path, and folders group:
+To use your own, drop files with the same names into the same folders. To change the
+names, edit `src/roster.js` and regenerate:
 
-```
-src/sources/Scoreboard.jsx              →  #/source/scoreboard
-src/sources/LowerThird.jsx              →  #/source/lower-third
-src/sources/lower-thirds/Single.jsx     →  #/source/lower-thirds/single
-src/sources/game/Scoreboard.jsx         →  #/source/game/scoreboard
+```bash
+node scripts/placeholders.mjs
 ```
 
-The group carries through to the name OBS gives the source — `SS - My Studio -
-Lower Thirds / Single` — so a scene list sorts the way the repo does.
+Nothing else changes. The control writes a slug and the scene templates a file path
+off it (`./units/:value:.svg`), so the roster is the only place the names live.
 
-> **`src/sources/` is only for graphics.** Everything in it becomes a browser
-> source, so a shared plate, a hook or a helper belongs somewhere else —
-> `src/components/` is the obvious home. A file left in `sources/` by mistake turns
-> up in the operator's list and in OBS, which is a confusing way to find out.
+## Starting your own
 
-To name them by hand instead, pass a plain object to `sources` in `src/studio.js`;
-that file is the only place it matters.
+Do not fork this. Use the
+[template](https://github.com/FourCourtJester/Single-Studio-Template) — it is the
+same framework with one graphic instead of seven, and a no-op mutation waiting to be
+filled in.
 
-## Deploy
+- [Getting started](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/getting-started.md)
+- [Component reference](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/api.md)
+- [Your own data](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/data.md)
 
-Switch **Settings &rarr; Pages &rarr; Source** to **GitHub Actions**, then push to the
-default branch. `.github/workflows/pages.yml` does the rest, and the board lands at
-`https://<you>.github.io/<this-repo>/#/`.
+## Tests
 
-Asset paths are relative, so it works at a repo subpath with no configuration — the
-same build would serve from a custom domain or straight off a disk.
-
-That published URL is the one you paste into OBS, and the one every invite link is
-built from. Deploy before you set up collaboration.
-
-## Bring other people in
-
-Already wired. Open **Collaborate** in the header menu, paste a free Supabase
-project's ID and publishable key, and press **Go**; send anybody the link it puts in
-your address bar. Nothing connects until you do that, so a one-machine show pays
-nothing for it — but a `connect` that is absent at build time is a collaboration
-button that does not exist, which is why it is in `src/velcro.worker.js` from the
-start.
-
-Shows are encrypted by default. The key is generated for you, rides the URL
-fragment where no server ever sees it, and _is_ the room — so there is no room name
-to invent and none for anybody to guess. Send the link like a password.
-
-See [collaborating.md](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/collaborating.md)
-for the Supabase steps and what to do when somebody has to be shut out.
-
-## Where things live
-
-| Path                      | What it is                                                     |
-| ------------------------- | -------------------------------------------------------------- |
-| `src/studio.js`           | The registry: name, id, control surface, one entry per graphic |
-| `src/config.js`           | `STUDIO_ID` — names the IndexedDB store and every channel      |
-| `src/velcro.worker.js`    | The SharedWorker that owns state. No React in here             |
-| `src/mutations/`          | Your own state changes, alongside the built-in ones            |
-| `src/control/Control.jsx` | The operator's board                                           |
-| `src/sources/`            | One component per graphic                                      |
-
-Components come from one of two entry points, and which one a file uses says which
-half of the show it belongs to:
-
-```js
-import { Field, Panel, Toggle } from '@single-studio/core/control' // src/control/
-import { Scene, Toggle, Variable } from '@single-studio/core/source' // src/sources/
+```bash
+npm run build && npm run preview   # in one shell
+npm run e2e                        # in another
 ```
 
-Hooks, mutations and toolkits are on the root `@single-studio/core`.
-
-## Where to look things up
-
-Kept in the framework's repository rather than copied in here, so they cannot go
-stale against the version you are on.
-
-- [Component reference](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/api.md) — every component, its props, and what reads it on air
-- [Your own data](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/data.md) — writing your own state changes, and pulling data in from a feed
-- [Getting started](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/getting-started.md) — the longer walkthrough, including transitions and the asset library
-- [Collaborating](https://github.com/FourCourtJester/Single-Studio/blob/main/docs/collaborating.md) — for whoever is running the show on the night
+`e2e/smoke.mjs` drives a real browser: SharedWorker startup, BroadcastChannel
+fan-out between tabs, IndexedDB persistence, transition timing, and the clocks. It
+runs against whatever version of the framework is installed, so a green run here is
+a statement about the published packages rather than about a working copy.

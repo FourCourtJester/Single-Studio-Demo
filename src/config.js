@@ -1,6 +1,7 @@
 // The store id, shared by the studio definition and the SharedWorker host.
 //
-// Keep it in one place: this id names the IndexedDB database and every
-// BroadcastChannel, so the two have to agree exactly. Change it and you start
-// from a clean slate.
-export const STUDIO_ID = 'my-studio'
+// One constant, imported by both, because these two have to agree: the id names
+// the IndexedDB database and every BroadcastChannel. Hard-coding it in two places
+// is how you get a control surface that looks connected and silently talks to
+// nobody.
+export const STUDIO_ID = 'demo'

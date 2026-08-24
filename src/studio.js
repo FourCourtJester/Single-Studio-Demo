@@ -1,33 +1,29 @@
-import { defineStudio, sourcesFrom } from '@single-studio/core'
+import { defineStudio } from '@single-studio/core'
 
 import { STUDIO_ID } from './config'
 
-// Every graphic in src/sources/ becomes a browser source. Add a file, and its URL
-// appears in the control surface's Browser sources list, named and ready to paste
-// into OBS -- there is no registry to keep in step.
+// Everything the framework needs to know about this studio, declared once.
 //
-// The key comes from the path: `Scoreboard.jsx` is `scoreboard`, `LowerThird.jsx` is
-// `lower-third`, and a folder groups, so `sources/lower-thirds/Single.jsx` is
-// `lower-thirds/single` and shows up in OBS as "Lower Thirds / Single".
+// `sources` is written out by hand here, and deliberately so. The template globs
+// the folder -- `sourcesFrom(import.meta.glob('./sources/**/*.jsx'))` -- which is
+// what a studio should normally do, since adding a graphic is then adding a file.
+// Keeping the map here means both paths stay covered by something: the explicit one
+// through these end-to-end suites, and the globbed one through the chunk check in
+// scripts/verify-template.mjs.
 //
-// **src/sources/ is only for graphics.** Anything in there becomes a browser source,
-// so a shared plate, a hook or a helper belongs somewhere else -- src/components/ is
-// the obvious home. A file put there by mistake turns up in the operator's list and
-// in OBS, which is a confusing way to find out.
-//
-// `import.meta.glob` is resolved by Vite at build time, not at runtime: it becomes a
-// literal object of dynamic imports before any code runs, so every graphic is still
-// code-split into its own chunk and nothing is loaded until it is opened.
-//
-// Prefer to name them yourself? Pass a plain object instead, and this file is the
-// only place that changes:
-//
-//   sources: { scoreboard: () => import('./sources/Scoreboard') },
-
+// It also lets a key demonstrate grouping without renaming the file behind it.
 export const studio = defineStudio({
-  name: 'My Studio',
+  name: 'Demo',
   id: STUDIO_ID,
-  worker: () => new SharedWorker(new URL('./velcro.worker.js', import.meta.url), { type: 'module', name: `velcro-${STUDIO_ID}` }),
+  worker: () => new SharedWorker(new URL('./velcro.worker.js', import.meta.url), { type: 'module', name: 'velcro-demo' }),
   control: () => import('./control/Control'),
-  sources: sourcesFrom(import.meta.glob('./sources/**/*.jsx')),
+  sources: {
+    match: () => import('./sources/Match'),
+    scoreboard: () => import('./sources/Scoreboard'),
+    'lower-third': () => import('./sources/LowerThird'),
+    standings: () => import('./sources/Standings'),
+    sponsor: () => import('./sources/Sponsor'),
+    ticker: () => import('./sources/Ticker'),
+    'lower-thirds/guest': () => import('./sources/Guest'),
+  },
 })

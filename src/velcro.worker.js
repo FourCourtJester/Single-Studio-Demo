@@ -1,76 +1,71 @@
 import { createVelcroHost } from '@single-studio/core/worker'
 import { connectSupabase } from '@single-studio/provider-supabase'
+import { WebsocketProvider } from 'y-websocket'
 
 import { STUDIO_ID } from './config'
 import { mutations } from './mutations'
 
-// The SharedWorker that owns this studio's state. Keep React out of this file --
-// it is a separate bundle from your UI.
+// The SharedWorker entry. This is the whole plugin mechanism for state:
+// the studio hands its own mutations to the host at startup, so there is no
+// dynamic import of a conventional path and nothing is discovered by globbing.
 //
-// It is also the whole plugin mechanism for state: the studio hands its own
-// mutations to the host at startup, so nothing is discovered by globbing and
-// nothing has to live at a conventional path.
+// React is deliberately absent from this module -- it is a separate bundle.
 
 /**
- * How this studio reaches other operators, and why it is wired up from the start.
+ * Whichever transport the address turns out to be.
  *
- * Nothing connects until somebody pastes a link, so this costs you nothing on a
- * one-machine show -- and it cannot be added later without a redeploy, because a
- * `connect` that is absent at build time is a collaboration button that does not
- * exist. Leaving it in means the day somebody says "can my producer drive the
- * lower third", the answer is a link rather than a release.
+ * A studio deploys as static files and we hold no keys, so what an operator has is
+ * whatever they signed up for -- and asking them which *kind* of thing they pasted
+ * is a question they should not have to answer. The address already says:
  *
- * The address is never baked in. A studio deploys as static files and holds no
- * keys, so the board reads where to go from its own URL -- which is what makes an
- * invite link the whole of an operator's setup. See useRelay.
+ *   https://xyz.supabase.co   a Supabase project, with its anon key
+ *   wss://relay.example.com   a y-websocket relay, theirs or packages/relay
+ *
+ * A studio that only ever uses one can of course pass one `connect` and skip this.
  */
 const connect = (context) => {
-  // A Supabase project reference resolves to https. Anything else is somebody's own
-  // relay, which this template does not carry a client for.
-  if (!/^https?:/.test(context.url)) {
-    throw new Error(`This studio only knows how to reach a Supabase project, and ${context.url} is not one. To run your own relay, add y-websocket and a branch here.`)
-  }
+  const { doc, url, room, token, secret, report } = context
 
-  return connectSupabase(context)
+  if (/^https?:/.test(url)) return connectSupabase(context)
+
+  // Refused rather than ignored. A relay holds a replica of the show so a late
+  // joiner gets it without another machine being awake, which means it has to be
+  // able to read what it is given -- so there is no way to honour a key here. The
+  // dangerous version of this is the quiet one: sending in the clear while a board
+  // shows a link with a key in it would have everyone believing the show was
+  // sealed while every frame went out readable.
+  if (secret) throw new Error('This link carries a room key, and a relay cannot use one: it holds a copy of the show, so it has to be able to read it. Use a Supabase project to encrypt, or an invite link without a key.')
+
+  const provider = new WebsocketProvider(url, room, doc, { params: token ? { token } : {} })
+
+  // The provider knows when it is genuinely connected; the seam only guesses when
+  // nothing tells it otherwise.
+  provider.on('status', ({ status }) => report(status === 'connected' ? 'connected' : 'connecting'))
+  // y-websocket hands back a plain Event here, which carries no message of its own
+  // when the failure was a refused socket rather than a close frame.
+  provider.on('connection-error', (/** @type {Event & { message?: string }} */ event) => report('error', event?.message ?? 'relay unreachable'))
+
+  return provider
 }
+
+// The studio always knows *how* to join a room and never where, unless a build
+// says so. A relay baked into the build cannot be changed without a redeploy, and
+// the board reads its address from its own URL instead -- which is what makes an
+// invite link the whole of an operator's setup. See useRelay.
+const preset = import.meta.env.VITE_RELAY_URL
 
 createVelcroHost({
   name: STUDIO_ID,
   mutations,
-  sync: { connect },
+  sync: {
+    url: preset,
+    room: import.meta.env.VITE_RELAY_ROOM ?? STUDIO_ID,
+    token: import.meta.env.VITE_RELAY_TOKEN,
 
-  /**
-   * Runs once the show has been read back from disk, before anything is on air.
-   *
-   * `mutate` is the same dispatcher a board gets from `useVelcroMutate`, so data a
-   * studio owns rather than an operator -- a scoring feed, a socket, a clock of
-   * your own -- lands through the same registry and replicates the same way.
-   *
-   * Here rather than on a page because there is one worker and there may be five
-   * open boards: a poll started on a page runs once per tab, five fetches racing
-   * for the same paths. Delete this if nothing but people writes to your show.
-   */
-  onReady({ mutate, owns }) {
-    if (!import.meta.env.VITE_FEED_URL) return
+    // Nothing happens until somebody says where. With a build-time address that is
+    // immediately; otherwise it is whenever a link arrives.
+    autoConnect: Boolean(preset),
 
-    setInterval(async () => {
-      // One machine talks to the outside world. `owns()` goes false once somebody
-      // else in the room has ticked "This machine runs OBS", and they are then the
-      // one polling -- everyone else gets the same data through replication a
-      // moment later. Without this a five-operator show is five times the API
-      // quota and five writers racing on the same paths, and it looks perfect in
-      // testing because you test it alone.
-      if (!owns()) return
-
-      try {
-        const response = await fetch(import.meta.env.VITE_FEED_URL)
-
-        mutate('my:feed', await response.json())
-      } catch (error) {
-        // A feed that is down must not take the show with it. The last values it
-        // sent are still on air, which is the right thing for them to be.
-        console.warn('[studio] feed unreachable', error)
-      }
-    }, 5000)
+    connect,
   },
 })
